@@ -369,14 +369,6 @@ const demo_page = (data) => {
     <div id="container">
         <header>
 
-            <!-- Banner
-            <g9-banner data-g9-banner></g9-banner>-->
-
-            <!-- Application Navigation
-            <g9-appnav data-g9-template>
-                <div style="height: 1rem; padding-block: var(--padding-m);"></div>
-            </g9-appnav>-->
-
             <!-- Page specific navigation controls -->
             <nav id="page-nav">
                 <p style="font-weight: 600; font-size: var(--rem-2); padding-block: var(--rem-05)">Simple G9 Demo</p>
@@ -386,7 +378,6 @@ const demo_page = (data) => {
 
         <main>
             <section id="page-content" style="padding-inline: var(--rem-05); min-height:100dvh;">
-
 
             <!-- list routes here -->
             <div id="view_routes">${data.routes}</div>
@@ -408,10 +399,6 @@ const demo_page = (data) => {
                 </footer>
             </section>
         </main>
-
-        <!-- Modal placeholder -->
-        <g9-modal data-g9-modal></g9-modal>
-
     </div>
 </body>
 <script>
