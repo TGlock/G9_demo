@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta http-equiv="Content-Type" content="text/html;charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Monster">
+    <title>G9 - Deemo</title>
+    <link rel="icon" type="image/icon" href="/static/img/favicon.ico" />
+    <link rel="stylesheet" href="/static/css/fontawesome-512-all.min.css">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+    <div id="container">
+
+        <header>
+
+            <!-- Banner -->
+            <g9-banner data-g9-banner></g9-banner>
+
+            <!-- Application Navigation -->
+            <g9-appnav data-g9-template>
+                <div style="height: 1rem; padding-block: var(--padding-m);"></div>
+            </g9-appnav>
+
+            <!-- Page specific navigation controls -->
+            <nav id="page-nav" data-g9-on="click:handle_view">
+
+                <div class="navbar-group">
+                    <button class="button is-hidden" data-g9-view="form">
+                        <i class="fa fa-plus-circle mr-s"></i>
+                        <span>New</span>
+                    </button>
+                </div>
+
+                <div class="navbar-group">
+                    <div class="navbar-group" style="column-gap: var(--gap-s);">
+                        <button class="button is-hidden" data-g9-view="list" data-toggleset="view"><i class="fas fa-list mr-s"></i><span>List</span></button>
+                        <button class="button is-hidden" data-g9-view="grid" data-toggleset="view"><i class="fas fa-th mr-s"></i><span>Grid</span></button>
+                    </div>
+
+                    <button class="button is-hidden" data-g9-view="filter">
+                        <i class="fas fa-filter"></i>
+                        <span class="ml-s">Filter</span>
+                    </button>
+
+                    <button class="button is-hidden" data-g9-view="sort">
+                        <i class="fas fa-sort"></i>
+                        <span class="ml-s">Sort</span>
+                    </button>
+
+                    <button class="button is-hidden" data-g9-action="save"><span>Save</span></button>
+                    <button class="button is-hidden" data-g9-action="cancel"><span>Cancel</span></button>
+                    <button class="button is-hidden" data-g9-action="apply"><span>Apply</span></button>
+                </div>
+
+               <!--  <div id="tbr-save-cancel" class="navbar-group is-hidden" data-g9-on="click:handle_save_cancel"
+                    style="column-gap: var(--gap-m); padding-right:var(--rem-1); padding-left:var(--rem-05)">
+                    <button class="button" data-g9-action="save"><span data-g9-mode>Save</span></button>
+                    <button class="button" data-g9-action="cancel"><span>Cancel</span></button>
+                </div> -->
+
+            </nav>
+
+        </header>
+
+        <main>
+            <section id="page-content" style="padding-inline: var(--rem-05);">
+
+                <div id="view_dash" class="is-hidden" data-g9-on="click:handle_dashevent">
+
+                </div>
+
+                <div id="view_filter" class="is-hidden">
+                </div>
+
+                <div id="view_list" class="is-hidden">
+                </div>
+
+                <div id="view_grid" class="is-hidden">
+                </div>
+
+                <div id="view_form" class="is-hidden">
+                </div>
+
+                <div id="view_sort" class="is-hidden">
+                </div>
+
+            </section>
+
+            <!-- Application Footer -->
+            <g9-footer data-g9-template></g9-footer>
+        </main>
+
+        <!-- Modal placeholder -->
+        <g9-modal data-g9-modal></g9-modal>
+
+    </div>
+
+<script type="module">
+    import Templates from '/static/js/templates.mjs'
+    import Demo from '/static/js/demo.js'
+
+    const doc = window.document
+
+    Templates.use(doc)
+
+    const demo = new Demo()
+
+    demo.use(doc, Templates)
+
+    doc.defaultView.addEventListener('load', async () => {
+        await demo.init()
+    })
+</script>
+</body>
+</html>

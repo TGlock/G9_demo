@@ -1,0 +1,8 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+
+app/public/static/js/templates.mjs
+app/public/static/webfonts
+
+**/.DS_Store
