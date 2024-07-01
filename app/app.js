@@ -1,33 +1,26 @@
 'use strict';
 
-//Application imports
+// App imports
+import { config } from './config.js'
 import { createReadStream, watch } from 'node:fs';
 
-import { config } from './config.js'
-import { directory_list, file_compress, Compressor } from '../../G9/lib/compress.js';
+// G9 imports
+import { Logger, LOG_LEVELS } from '../../G9/lib/logger.js'
+import { directory_list, file_compress } from '../../G9/lib/compress.js';
+import { send_file, send_buffer, send_html, send_json, send_text, send_stream, file_stat, error_to_text } from '../../G9/lib/sender.js'
+import { setTimeout } from 'node:timers/promises';
 
-//G9 imports
-import {
-    file_stat,
-    send_file,
-    send_buffer,
-    send_html,
-    send_json,
-    send_text,
-    send_stream,
-    error_to_text
-} from '../../G9/lib/sender.js'
+// underscore naming convention indicates module scope
+const _logger = Logger(LOG_LEVELS.debug),
+    _file_map = new Map(),
+    _sse_clients = [],
+    _sse_messages = [];
 
-//App Global Scope
-const _file_map = new Map(),
-     _sse_clients = [];
-
-//Top level
+//compress files found in directory
 const compress_files = async (directory, shallow = false) => {
 
     //compress files for do_static
     const files = await directory_list(directory, shallow);
-
     for (const filename of files) {
         let f_data = await file_compress(filename),
             key = filename.replace(config.static_parent, '') //use url as key. E.g. '/static/htm/page.html'
@@ -35,10 +28,11 @@ const compress_files = async (directory, shallow = false) => {
             _file_map.set(key, f_data)
         }
     }
-
+    //log statistics
     compress_stats()
 }
 
+// log statistics
 const compress_stats = () => {
 
     let count = 0,
@@ -67,9 +61,7 @@ const compress_stats = () => {
 
     }
 
-    console.log('_compress_map stats:', count, 'files,', (28227929 / (1024 * 1000)).toFixed(2) + 'mb', smallest, 'min,' , largest, 'max,', (size_bytes / count).toFixed(0), 'average size')
-   // console.timeEnd('compress_stats')
-
+    _logger.log('_compress_map stats:', count, 'files,', (28227929 / (1024 * 1000)).toFixed(2) + 'mb', smallest, 'min,' , largest, 'max,', (size_bytes / count).toFixed(0), 'average size')
 }
 
 const do_static = async (req, res) => {
@@ -101,39 +93,6 @@ const do_static = async (req, res) => {
                     'ETag': f.etag
                 }
             );
-
-            /* Multiple examples of other ways to do this...
-            res.prepare(
-                status,
-                f.data,
-                send_buffer,
-                'Content-Type', f.mime,
-                'Cache-Control', 'max-age=120',
-                'Content-Encoding', f.enco,
-                'Content-Length', f.data.length,
-                'Vary', 'Accept-Encoding', //https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Vary
-                'ETag', f.etag
-            );
-
-            res.statusCode = status
-            res.setHeader('Content-Type', f.mime)
-            res.setHeader('Cache-Control', 'max-age=120')
-            res.setHeader('Content-Length', f.data.length)
-            res.setHeader('Content-Encoding', f.enco)
-            res.setHeader('Vary', 'Accept-Encoding') //https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Vary
-            res.setHeader('ETag', f.etag)
-            res.end((status === 304 || res.req.method === 'HEAD') ? null : f.data)
-
-            res.writeHead(status,
-                ['Content-Type', f.mime,
-                'Cache-Control', 'max-age=120',
-                'Content-Length', f.data.length,
-                'Content-Encoding', f.enco,
-                'Vary', 'Accept-Encoding', //https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Vary
-                'ETag', f.etag])
-            res.end((status === 304 || res.req.method === 'HEAD') ? null : f.data)
-            */
-
 
         } else if (f.data && f.enco && !accept_encoding) { //data encoded in map but client does not accept...
 
@@ -181,19 +140,7 @@ const do_static = async (req, res) => {
         try {
             let f = await file_stat(config.static_parent + req.path, true)
 
-            /*
-            res.prepare(
-                (f.etag === req.headers['if-none-match']) ? 304 : 200,
-                f.data,
-                send_stream,
-                'Content-Type', f.mime,
-                'Cache-Control', 'max-age=120',
-                'Transfer-Encoding', 'chunked',
-                'ETag', f.etag
-            ); */
-
             //transfer-encoding auto set for streams...
-
             res.send(
                 (f.etag === req.headers['if-none-match']) ? 304 : 200,
                 f.data,
@@ -295,81 +242,51 @@ const do_parameter = async (req, res) => {
 const create_route_middleware_stack = (router) => {
 
     const authenticated = async (req, res, fn) => {
-        console.log('enter authenticated')
+        _logger.log('enter authenticated')
         res.prepare(200, 'Authenticated', send_text, 'X-Header', 'A')
         if (fn) await fn()
-        console.log('exit authenticated')
+        _logger.log('exit authenticated')
     }
     const authorized = async (req, res, fn) => {
-        console.log('enter authorized')
+        _logger.log('enter authorized')
         res.prepare(200, res.body += '\nAuthorized', send_text, 'X-Header', 'B')
         if (fn) await fn()
-        console.log('exit authorized')
+        _logger.log('exit authorized')
     }
     const handle_route = async (req, res, fn) => {
-        console.log('enter handler')
+        _logger.log('enter handler')
         if (fn) await fn()
         res.prepare(200, res.body += '\nHandled \n\n Also see server log and http headers in dev tools.', send_text, 'X-Header', 'C')
-        console.log('exit handler')
+        _logger.log('exit handler')
     }
 
     return router.compose([authenticated, authorized, handle_route])
 
 }
 
-
-// handle request to broadcast a message...
-const events_broadcast = async (req, res) => {
-
-    let msg = req.URL.searchParams.get('msg') || 'test message',
-        count = 0;
-
-    if (msg) {
-
-        _sse_message_que.push(msg)
-
-        for (let sse_client of _sse_clients) {
-            let id = _sse_message_que.length
-            try {
-                if (sse_client.response?.destroyed) {
-                    console.log('sse client disconnected:', sse_client.trace_id)
-                } else {
-                    count += 1
-                    sse_client.body.msg = msg
-                    sse_client.response.write('data: ' + JSON.stringify(c.body) + '\n\nid: ' + id + '\n\n')
-                }
-            } catch (err) {
-                console.log('events_broadcast error', err)
-            }
-        }
-
-        send_text(res, 'message: "' + msg + '" qued and sent ' + count + ' subscribers.')
-    }
-
-}
-
-
 // handle an SSE subscriber
 const events_subscribe = (req, res) => {
 
-    res.body = { msg: _sse_message_que[_sse_message_que.length] }
-
-    _sse_clients.push(req, res)
+    //store the subscriber req and res...
+    _sse_clients.push({req, res})
 
     let last_event_id = req.headers['last-event-id']
 
-    console.log('last-event-id:', last_event_id || '(none)')
+    _logger.log('last-event-id:', last_event_id || '(none)')
 
-    //In uses cases where messages are qued and have an id this function might
-    //check for 'last-event-id' and send any missed messages back...
-    //last-event-id is for when server communication is lost...
+    res.writeHead(200, {'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive'})
+
+    //In uses cases where subscribers must see missed messages
+    // ensure each message has an id and
+    // check for 'last-event-id' and send any missed messages back...
+    // last-event-id is intended for when server communication is lost...
 
     if (last_event_id) {
-        let ndx = parseInt(last_event_id, 10),
+        let ndx = parseInt(last_event_id, 10),  //using ints
             missed_messages = '';
 
-        for (let i = ndx + 1, max = _sse_message_que.length; i < max; i += 1) {
-            missed_messages += 'data: ' + JSON.stringify({ msg: _sse_message_que[i] }) + '\n\nid: ' + i + '\n\n'
+        for (let i = ndx + 1, max = _sse_messages.length; i < max; i += 1) {
+            missed_messages += 'data: ' + JSON.stringify({ msg: _sse_messages[i] }) + '\n\nid: ' + i + '\n\n'
         }
         if (missed_messages) {
             res.body = missed_messages
@@ -377,17 +294,37 @@ const events_subscribe = (req, res) => {
     }
 
 }
+
+// just for demo purposes... prod version would be vastly different...
+const broadcast_sse = () => {
+
+    const message = Math.random().toString(36).slice(2)
+
+    for (const client of _sse_clients) {
+        try {
+            if (client.res.destroyed) {
+                _logger.log(`sse client: ${client.trace_id} has disconnected.`)
+            } else {
+                client.res.write('event: ping\ndata: ' + JSON.stringify(message) + '\n\nid: ' + '0' + '\n\n')
+            }
+        } catch (err) {
+            _logger.log('broadcast_sse error', err)
+        }
+    }
+
+}
+
 const handle_multipart = (req, res) => {
-    console.log('handle_multipart', req.data)
+    _logger.log('handle_multipart', req.data)
     res.prepare(200, req.data, send_json)
 }
 
 const filewatch_init = () => {
 
     const watch_fn = async function (eventType, filename) {
-        console.log('watch event', eventType);
+        _logger.log('watch event', eventType);
         if ((eventType === 'change') && filename) {
-            console.log('watch event filename', filename);
+            _logger.log('watch event filename', filename);
 
             filename = filename.replaceAll('\\', '/') //normalize slashes
 
@@ -412,14 +349,11 @@ const filewatch_init = () => {
             }
 
         } else {
-            console.log('watch event - filename not provided');
+            _logger.log('watch event - filename not provided');
         }
     }
 
-    watch(config.static_folder_path,
-        { persistent: true, recursive: true },
-        watch_fn
-    );
+    watch(config.static_folder_path, { persistent: true, recursive: true }, watch_fn);
 }
 
 const demo_page = (data) => {
@@ -449,22 +383,35 @@ const demo_page = (data) => {
             </g9-appnav>-->
 
             <!-- Page specific navigation controls -->
-            <nav id="page-nav" data-g9-on="click:handle_view">
-                <span>Simple G9 Demo</span>
+            <nav id="page-nav">
+                <p style="font-weight: 600; font-size: var(--rem-2); padding-block: var(--rem-05)">Simple G9 Demo</p>
             </nav>
 
         </header>
 
         <main>
-            <section id="page-content" style="padding-inline: var(--rem-05);">
-                <div id="view_routes">${data.routes}</div>
-                <div id="events">
-                    <ul id="sse-event-list"></ul>
-                </div>
+            <section id="page-content" style="padding-inline: var(--rem-05); min-height:100dvh;">
+
+
+            <!-- list routes here -->
+            <div id="view_routes">${data.routes}</div>
+
+            <!-- TOOD SSE demo -->
+            <div id="events">
+                <p style="padding-block:var(--rem-1)">Last SSE Event: <span id="sse-event-list"></span></p>
+            </div>
+
             </section>
 
             <!-- Application Footer -->
-            <g9-footer data-g9-template></g9-footer>
+            <section id="footer">
+                <footer>
+                    <a href="#">License</a>
+                    <a href="#">Support</a>
+                    <a href="#">Privacy Policy</a>
+                    <a href="#">Terms of Service</a>
+                </footer>
+            </section>
         </main>
 
         <!-- Modal placeholder -->
@@ -473,19 +420,14 @@ const demo_page = (data) => {
     </div>
 </body>
 <script>
+    const evt_source = new EventSource('./sse/subscribe'); // listen for sse
 
-    //listen for sse
-    const evtSource = new EventSource('./sse/subscribe');
-
-    evtSource.addEventListener("ping", (event) => {
-        const li = document.createElement("li");
-        const ul = document.getElementById("sse-event-list");
-        const time = JSON.parse(event.data).time;
-        li.textContent = "ping at " + time;
-        ul.appendChild(li);
+    evt_source.addEventListener("ping", (event) => {
+        const el = document.getElementById("sse-event-list");
+        const msg = JSON.parse(event.data);
+        el.textContent = msg;
     });
 </script>
-
 </html>`
 }
 
@@ -550,20 +492,18 @@ const routes_init = async (g9) => {
     filewatch_init()
 }
 
+//start broadcast
+setInterval(broadcast_sse, 1000)
+
 export {
     routes_init
 }
 
 /*
-//Algo
-Walk directory...
-F stat and compress files into a map.
-sort the map by filename?
-
-*/
+Considerd the following for static file handling. Decided on Opt 5.
 
 //Opt 1
-//compress all into map
+//compress everthing into map
 //during request - fstat and mark if changed
 //timer event - iterate map - recompress changed...
 
@@ -591,6 +531,5 @@ sort the map by filename?
             - not found = not found
         found
             if data - send it.
-            else stream file...
-
+            else stream it...
 */
