@@ -420,7 +420,6 @@ const routes_init = async (g9) => {
     // compress files in these directories
     await compress_files(config.static_folder_path + 'htm')
     await compress_files(config.static_folder_path + '/css', true)
-    await compress_files(config.static_folder_path + '/js')
 
     // assign custom 404 handler...
     r.not_found = do_not_found
