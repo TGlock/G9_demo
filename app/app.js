@@ -61,7 +61,7 @@ const compress_stats = () => {
 
     }
 
-    _logger.log('_compress_map stats:', count, 'files,', (28227929 / (1024 * 1000)).toFixed(2) + 'mb', smallest, 'min,' , largest, 'max,', (size_bytes / count).toFixed(0), 'average size')
+    _logger.log('_compress_map stats:', count, 'files,', (28227929 / (1024 * 1000)).toFixed(2) + 'mb', smallest, 'min,', largest, 'max,', (size_bytes / count).toFixed(0), 'average size')
 }
 
 const do_static = async (req, res) => {
@@ -199,7 +199,7 @@ const do_not_found = async (req, res) => {
     // Note 404s are cacheable... ( https://httpwg.org/specs/rfc7231.html#status.404 )
 
     if (req.path.startsWith(config.static_prefix)) {
-       send_html(res, 404, `<h3>Resource ${req.path} Not Found</h3>`)
+        send_html(res, 404, `<h3>Resource ${req.path} Not Found</h3>`)
 
     } else if (req.path.startsWith(config.api_prefix)) {
         send_json(res, 404, { error: 'api not found' })
@@ -268,13 +268,13 @@ const create_route_middleware_stack = (router) => {
 const events_subscribe = (req, res) => {
 
     //store the subscriber req and res...
-    _sse_clients.push({req, res})
+    _sse_clients.push({ req, res })
 
     let last_event_id = req.headers['last-event-id']
 
     _logger.log('last-event-id:', last_event_id || '(none)')
 
-    res.writeHead(200, {'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive'})
+    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' })
 
     //In uses cases where subscribers must see missed messages
     // ensure each message has an id and
@@ -312,11 +312,6 @@ const broadcast_sse = () => {
         }
     }
 
-}
-
-const handle_multipart = (req, res) => {
-    _logger.log('handle_multipart', req.data)
-    res.prepare(200, req.data, send_json)
 }
 
 const filewatch_init = () => {
@@ -461,7 +456,7 @@ const routes_init = async (g9) => {
     r.get('/error', do_force_error)
 
     // illustrate prepared response
-    r.get('/prepared', async (req, res) => { res.prepare(200, {attr: 'yo!'}, send_json) })
+    r.get('/prepared', async (req, res) => { res.prepare(200, { attr: 'yo!' }, send_json) })
 
     // illustrate parameters
     r.get('/parameter/:routevar:int', do_parameter)
@@ -482,7 +477,7 @@ const routes_init = async (g9) => {
 
     // demo page handler
     r.get('/demo', async (req, res) => {
-        send_html(res, 200, demo_page({routes : _htm }))
+        send_html(res, 200, demo_page({ routes: _htm }))
     })
 
     // illustrate SSE handlers
@@ -499,37 +494,18 @@ export {
     routes_init
 }
 
-/*
-Considerd the following for static file handling. Decided on Opt 5.
+/*  Considerd multiple options for static file handling.
+Decided on -
 
-//Opt 1
-//compress everthing into map
-//during request - fstat and mark if changed
-//timer event - iterate map - recompress changed...
-
-//Opt 2
-//compress all to disk
-//during request - check if accept encoding exists - return it or uncompressed
-//filewatch for changes - update disk (can happen in another process)
-
-//Opt 3
-//filewatch for changes - update map
-
-//Opt 4
-//filewatch for changes - mark map as dirty set delay timer - update map
-
-/* Opt 5
-//map everything in directories(s)
-    below a certain threshold (64k) store the data
+//map all files in specfied directories(s)
+    below a certain threshold (64k?) just store the data
         images (not compressed)
         html, css, js, svg (compressed)
     above threshold
         keep fstat, mime, size...
-        store the compressed version with '.{encoding}'
     when request comes
         check map
             - not found = not found
         found
             if data - send it.
-            else stream it...
-*/
+            else stream it...  */
