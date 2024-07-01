@@ -2,7 +2,6 @@
 node_modules/
 jspm_packages/
 
-app/public/static/js/templates.mjs
-app/public/static/webfonts
+app/public/static/js/*
 
 **/.DS_Store
