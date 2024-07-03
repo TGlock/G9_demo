@@ -502,7 +502,7 @@ const routes_init = async (g9) => {
     filewatch_init()
 }
 
-//start broadcast
+// start sse broadcast
 setInterval(sse_broadcast, 1000)
 
 export {
