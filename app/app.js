@@ -264,22 +264,41 @@ const create_route_middleware_stack = (router) => {
 
 }
 
-// handle an SSE subscriber
-const events_subscribe = (req, res) => {
+// Handle SSE subscriber -
+// see - https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events
+// NOTE - G9 is not http2 thus several limitations apply.
+const sse_subscribe = (req, res) => {
 
     //store the subscriber req and res...
-    _sse_clients.push({ req, res })
+    let found = false
+    for (let i = 0, max = _sse_clients.length; i < max; i += 1) {
+        if (_sse_clients[i] === null) {
+            _sse_clients[i] = { req, res }
+            found = true
+            break;
+        }
+    }
+    if (!found) {
+        _sse_clients.push({ req, res })
+    }
 
     let last_event_id = req.headers['last-event-id']
 
-    _logger.log('last-event-id:', last_event_id || '(none)')
+    _logger.log('sse_subscribe: subscriber id:', req.trace_id, 'last-event-id:', last_event_id || '(none)')
 
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' })
 
-    //In uses cases where subscribers must see missed messages
-    // ensure each message has an id and
-    // check for 'last-event-id' and send any missed messages back...
-    // last-event-id is intended for when server communication is lost...
+    /*
+    In uses cases where subscribers must see missed messages:
+        - ensure each message has an id (for use as last-event-id)
+        - client should send 'last-event-id' on subscribe
+        - server should send missed messages back...
+
+     For Consideration:
+        - messages may need to be in a persistant store
+        - last-event-id may need to be of a format easily sorted.
+        - how to handle subscribers requesting last-id which is not found or too old,
+     */
 
     if (last_event_id) {
         let ndx = parseInt(last_event_id, 10),  //using ints
@@ -295,22 +314,33 @@ const events_subscribe = (req, res) => {
 
 }
 
-// just for demo purposes... prod version would be vastly different...
-const broadcast_sse = () => {
+// Only for demo purposes... prod version would be vastly different...
+const sse_broadcast = () => {
 
+    // generate some random message
     const message = Math.random().toString(36).slice(2)
 
-    for (const client of _sse_clients) {
-        try {
-            if (client.res.destroyed) {
-                _logger.log(`sse client: ${client.trace_id} has disconnected.`)
-            } else {
-                client.res.write('event: ping\ndata: ' + JSON.stringify(message) + '\n\nid: ' + '0' + '\n\n')
+    let count = 0
+
+    // TODO - explore use of Map
+    for (let i = 0, max = _sse_clients.length; i < max; i+=1) {
+        let client = _sse_clients[i]
+        if (client) {
+            try {
+                if (client.res.destroyed) {
+                    _logger.log(`sse_broadcast client disconnected ${client.req.trace_id} . Free slot: ${i}`)
+                    _sse_clients[i] = null
+                } else {
+                    client.res.write(`event: ping\ndata: ${JSON.stringify(message)}\n\nid: 0\n\n`)
+                    count += 1
+                }
+            } catch (err) {
+                _logger.log('sse_broadcast error:', err, 'trace_id:', client.req.trace_id)
             }
-        } catch (err) {
-            _logger.log('broadcast_sse error', err)
         }
     }
+
+    _logger.log('sse_broadcast: client count: ', count)
 
 }
 
@@ -359,13 +389,11 @@ const demo_page = (data) => {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="G9 Demo">
     <title>G9 - Demo</title>
-    <link rel="icon" type="image/icon" href="/static/img/favicon.ico" />
-    <link rel="stylesheet" href="/static/css/fontawesome-512-all.min.css">
+    <link rel="icon" type="image/icon" href="/static/img/favicon.ico">
     <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body>
-
     <div id="container">
         <header>
 
@@ -402,6 +430,7 @@ const demo_page = (data) => {
     </div>
 </body>
 <script>
+    //SSE subscription - just for demo - prod would differ
     const evt_source = new EventSource('./sse/subscribe'); // listen for sse
 
     evt_source.addEventListener("ping", (event) => {
@@ -467,23 +496,25 @@ const routes_init = async (g9) => {
     })
 
     // illustrate SSE handlers
-    r.get('/sse/subscribe', events_subscribe);
+    r.get('/sse/subscribe', sse_subscribe);
 
     //watch static folder for changes
     filewatch_init()
 }
 
 //start broadcast
-setInterval(broadcast_sse, 1000)
+setInterval(sse_broadcast, 1000)
 
 export {
     routes_init
 }
 
-/*  Considerd multiple options for static file handling.
+/*
+Considerd multiple options for static file handling.
 Decided on -
 
-//map all files in specfied directories(s)
+walk specfied directories(s)
+    determine size and (likely) compression of each file:
     below a certain threshold (64k?) just store the data
         images (not compressed)
         html, css, js, svg (compressed)
@@ -493,5 +524,6 @@ Decided on -
         check map
             - not found = not found
         found
-            if data - send it.
-            else stream it...  */
+            if data - (and client supports) send it.
+            else stream it...
+*/
